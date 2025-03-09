@@ -2,12 +2,12 @@
 #
 # https://quarto.org/docs/reference/formats/markdown/gfm.html
 project:
+  type: website
   title: "python applied machine learning"
   output-dir: docs
   render:
     - "**/*.ipynb"
     - "!source" # Exclude source
-
 code-fold: false
 format: html # gfm: GitHub Flavored Markdown
 number-sections: true
