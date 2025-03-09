@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.6.42">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>TextExplainer: Debugging black box text classifier</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js" integrity="sha512-bLT0Qm9VnAYZDflyKcBaQ2gg0hSYNQrJ8RilYldYQ1FxQYoCLtUjuuRuZo+fjqhx/qtq/1itJ0C2ejDxltZVFg==" crossorigin="anonymous"></script><script src="02_debugging_black_box_text_classifier_files/libs/clipboard/clipboard.min.js"></script>
+<script src="02_debugging_black_box_text_classifier_files/libs/quarto-html/quarto.js"></script>
+<script src="02_debugging_black_box_text_classifier_files/libs/quarto-html/popper.min.js"></script>
+<script src="02_debugging_black_box_text_classifier_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="02_debugging_black_box_text_classifier_files/libs/quarto-html/anchor.min.js"></script>
+<link href="02_debugging_black_box_text_classifier_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="02_debugging_black_box_text_classifier_files/libs/quarto-html/quarto-syntax-highlighting-2f5df379a58b258e96c21c0638c20c03.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="02_debugging_black_box_text_classifier_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="02_debugging_black_box_text_classifier_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="02_debugging_black_box_text_classifier_files/libs/bootstrap/bootstrap-c0367b04c37547644fece4185067e4a7.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" integrity="sha512-c3Nl8+7g4LMSTdrm621y7kf9v3SDPnhxLNhcjFJbKECVnmZHTdo+IRO05sNLTH/D3vA6u1X32ehoLC7WFVdheg==" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
+
+
+</head>
+
+<body>
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#example-problem-lsasvm-for-20-newsgroups-dataset" id="toc-example-problem-lsasvm-for-20-newsgroups-dataset" class="nav-link active" data-scroll-target="#example-problem-lsasvm-for-20-newsgroups-dataset"><span class="header-section-number">1</span> Example problem: LSA+SVM for 20 Newsgroups dataset</a></li>
+  <li><a href="#textexplainer" id="toc-textexplainer" class="nav-link" data-scroll-target="#textexplainer"><span class="header-section-number">2</span> TextExplainer</a></li>
+  <li><a href="#sanity-check" id="toc-sanity-check" class="nav-link" data-scroll-target="#sanity-check"><span class="header-section-number">3</span> Sanity check</a></li>
+  <li><a href="#customizing-textexplainer-classifier" id="toc-customizing-textexplainer-classifier" class="nav-link" data-scroll-target="#customizing-textexplainer-classifier"><span class="header-section-number">4</span> Customizing TextExplainer: classifier</a></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">TextExplainer: Debugging black box text classifier</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p><code>eli5.lime</code> can help when it is hard to get exact mapping between model coefficients and text features, e.g.&nbsp;if there are dimensionality reduction involved <a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a>.</p>
+<section id="example-problem-lsasvm-for-20-newsgroups-dataset" class="level2" data-number="1">
+<h2 data-number="1" class="anchored" data-anchor-id="example-problem-lsasvm-for-20-newsgroups-dataset"><span class="header-section-number">1</span> Example problem: LSA+SVM for 20 Newsgroups dataset</h2>
+<p>We will create a sample text processing pipeline which is hard to debug using conventional method: SVM with RBF kernel trained on LSA features.</p>
+<div id="944a3d27-46fc-4eb8-b273-e815f2948a50" class="cell" data-tags="[]" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.datasets <span class="im">import</span> fetch_20newsgroups</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>categories <span class="op">=</span> [<span class="st">"alt.atheism"</span>, <span class="st">"soc.religion.christian"</span>, <span class="st">"comp.graphics"</span>, <span class="st">"sci.med"</span>]</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>twenty_train <span class="op">=</span> fetch_20newsgroups(</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    subset<span class="op">=</span><span class="st">"train"</span>,</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    categories<span class="op">=</span>categories,</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    shuffle<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    remove<span class="op">=</span>[<span class="st">"headers"</span>, <span class="st">"footers"</span>],</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>twenty_test <span class="op">=</span> fetch_20newsgroups(</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    subset<span class="op">=</span><span class="st">"test"</span>,</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    categories<span class="op">=</span>categories,</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    shuffle<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    remove<span class="op">=</span>[<span class="st">"headers"</span>, <span class="st">"footers"</span>],</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="7da9f608-127e-4095-a3f0-1051fc82cda1" class="cell" data-tags="[]" data-execution_count="2">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.decomposition <span class="im">import</span> TruncatedSVD</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.feature_extraction.text <span class="im">import</span> TfidfVectorizer</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.pipeline <span class="im">import</span> Pipeline, make_pipeline</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.svm <span class="im">import</span> SVC</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>vec <span class="op">=</span> TfidfVectorizer(min_df<span class="op">=</span><span class="dv">3</span>, stop_words<span class="op">=</span><span class="st">"english"</span>, ngram_range<span class="op">=</span>(<span class="dv">1</span>, <span class="dv">2</span>))</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>svd <span class="op">=</span> TruncatedSVD(n_components<span class="op">=</span><span class="dv">100</span>, n_iter<span class="op">=</span><span class="dv">7</span>, random_state<span class="op">=</span><span class="dv">42</span>)</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>lsa <span class="op">=</span> make_pipeline(vec, svd)</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>clf <span class="op">=</span> SVC(C<span class="op">=</span><span class="dv">150</span>, gamma<span class="op">=</span><span class="fl">2e-2</span>, probability<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>pipe <span class="op">=</span> make_pipeline(lsa, clf)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>pipe.fit(twenty_train.data, twenty_train.target)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>pipe.score(twenty_test.data, twenty_test.target)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="2">
+<pre><code>0.8901464713715047</code></pre>
+</div>
+</div>
+<div id="f9508f7c-55cd-4452-8e07-c896f061c53c" class="cell" data-tags="[]" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> print_prediction(doc):</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    y_pred <span class="op">=</span> pipe.predict_proba([doc])[<span class="dv">0</span>]</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> target, prob <span class="kw">in</span> <span class="bu">zip</span>(twenty_train.target_names, y_pred):</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"</span><span class="sc">{:.3f}</span><span class="st"> </span><span class="sc">{}</span><span class="st">"</span>.<span class="bu">format</span>(prob, target))</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>doc <span class="op">=</span> twenty_test.data[<span class="dv">0</span>]</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>print_prediction(doc)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>0.001 alt.atheism
+0.001 comp.graphics
+0.996 sci.med
+0.003 soc.religion.christian</code></pre>
+</div>
+</div>
+<p>The classifier predicts that the first document belongs to <code>sci.med</code> with high probability.</p>
+</section>
+<section id="textexplainer" class="level2" data-number="2">
+<h2 data-number="2" class="anchored" data-anchor-id="textexplainer"><span class="header-section-number">2</span> TextExplainer</h2>
+<p>eli5 does not support the pipeline directly, but we can use <code>TextExplainer</code>.</p>
+<p>We create an instance of <code>TextClassifier</code>, then pass the doc and the black-box classifier which implements <code>predict_proba</code> method to the <code>fit</code> method.</p>
+<div id="f84bcbc1-ddf1-4b0c-9b7e-153142d41868" class="cell" data-tags="[]" data-execution_count="4">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> eli5</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> eli5.lime <span class="im">import</span> TextExplainer</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>te <span class="op">=</span> TextExplainer(random_state<span class="op">=</span><span class="dv">42</span>)</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>te.fit(doc, pipe.predict_proba)</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>te.show_prediction(target_names<span class="op">=</span>twenty_train.target_names)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/usr/local/lib/python3.9/site-packages/sklearn/linear_model/_stochastic_gradient.py:173: FutureWarning: The loss 'log' was deprecated in v1.1 and will be removed in version 1.3. Use `loss='log_loss'` which is equivalent.
+  warnings.warn(
+/usr/local/lib/python3.9/site-packages/sklearn/utils/deprecation.py:87: FutureWarning: Function get_feature_names is deprecated; get_feature_names is deprecated in 1.0 and will be removed in 1.2. Please use get_feature_names_out instead.
+  warnings.warn(msg, category=FutureWarning)</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="4">
+
+    <style>
+    table.eli5-weights tr:hover {
+        filter: brightness(85%);
+    }
+</style>
+
+
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+
+    
+
+    
+
+    
+
+    
+        
+
+    
+
+    
+        
+    
+        
+        
+    
+        <p style="margin-bottom: 0.5em; margin-top: 0em">
+            <b>
+    
+        y=alt.atheism
+    
+</b>
+
+    
+    (probability <b>0.000</b>, score <b>-8.501</b>)
+
+top features
+        </p>
+    
+    
+<table class="eli5-weights caption-top table table-sm table-striped small" data-quarto-postprocess="true">
+<thead>
+<tr class="header" style="border: none;">
+<th data-quarto-table-cell-role="th" style="text-align: right; padding: 0 1em 0 0.5em; border: none;" title="Feature contribution already accounts for the feature value (for linear models, contribution = weight * feature value), and the sum of feature contributions is equal to the score or, for some classifiers, to the probability. Feature values are shown if &quot;show_feature_values&quot; is True.">Contribution<sup>?</sup></th>
+<th data-quarto-table-cell-role="th" style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 97.65%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">-0.407</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">&lt;BIAS&gt;</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 80.92%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">-8.094</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">Highlighted in text (sum)</td>
+</tr>
+</tbody>
+</table>
+
+
+    
+
+
+
+    <p style="margin-bottom: 2.5em; margin-top:-0.5em;">
+        <span style="background-color: hsl(120, 100.00%, 93.80%); opacity: 0.81" title="0.172">as</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 97.89%); opacity: 0.80" title="0.037">i</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 92.57%); opacity: 0.82" title="-0.223">recall</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 94.73%); opacity: 0.81" title="0.137">from</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 91.59%); opacity: 0.82" title="0.266">my</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.05%); opacity: 0.81" title="-0.091">bout</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.20%); opacity: 0.81" title="-0.120">with</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 82.80%); opacity: 0.86" title="-0.741">kidney</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 85.27%); opacity: 0.85" title="-0.593">stones</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(120, 100.00%, 96.42%); opacity: 0.81" title="0.079">there</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 80.21%); opacity: 0.87" title="0.905">isn</span><span style="opacity: 0.80">'</span><span style="background-color: hsl(120, 100.00%, 92.26%); opacity: 0.82" title="0.236">t</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.15%); opacity: 0.81" title="-0.121">any</span><span style="opacity: 0.80">
+</span><span style="background-color: hsl(0, 100.00%, 86.51%); opacity: 0.84" title="-0.523">medication</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 91.33%); opacity: 0.82" title="-0.278">that</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.76%); opacity: 0.81" title="-0.100">can</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 90.62%); opacity: 0.83" title="0.312">do</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 90.46%); opacity: 0.83" title="0.319">anything</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 92.58%); opacity: 0.82" title="-0.223">about</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 92.28%); opacity: 0.82" title="-0.236">them</span><span style="opacity: 0.80"> except </span><span style="background-color: hsl(0, 100.00%, 94.11%); opacity: 0.81" title="-0.160">relieve</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.31%); opacity: 0.81" title="-0.082">the</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 80.17%); opacity: 0.87" title="-0.908">pain</span><span style="opacity: 0.80">.
+
+either </span><span style="background-color: hsl(0, 100.00%, 93.81%); opacity: 0.81" title="-0.172">they</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.92%); opacity: 0.81" title="-0.130">pass</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(120, 100.00%, 91.89%); opacity: 0.82" title="0.253">or</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 96.14%); opacity: 0.81" title="0.088">they</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 98.47%); opacity: 0.80" title="-0.023">have</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 90.65%); opacity: 0.83" title="0.310">to</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 93.26%); opacity: 0.82" title="0.194">be</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 92.51%); opacity: 0.82" title="0.226">broken</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.79%); opacity: 0.81" title="-0.067">up</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 98.95%); opacity: 0.80" title="0.014">with</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 93.51%); opacity: 0.81" title="-0.184">sound</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(120, 100.00%, 93.36%); opacity: 0.82" title="0.190">or</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 96.14%); opacity: 0.81" title="0.088">they</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 98.47%); opacity: 0.80" title="-0.023">have</span><span style="opacity: 0.80">
+</span><span style="background-color: hsl(120, 100.00%, 90.65%); opacity: 0.83" title="0.310">to</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 99.21%); opacity: 0.80" title="0.009">be</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.39%); opacity: 0.81" title="-0.113">extracted</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 96.91%); opacity: 0.81" title="0.064">surgically</span><span style="opacity: 0.80">.
+
+</span><span style="background-color: hsl(0, 100.00%, 95.21%); opacity: 0.81" title="-0.119">when</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.76%); opacity: 0.81" title="-0.136">i</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 93.81%); opacity: 0.81" title="-0.172">was</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 98.94%); opacity: 0.80" title="0.014">in</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(0, 100.00%, 96.43%); opacity: 0.81" title="-0.078">the</span><span style="opacity: 0.80"> x-</span><span style="background-color: hsl(0, 100.00%, 94.10%); opacity: 0.81" title="-0.160">ray</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.98%); opacity: 0.81" title="-0.127">tech</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.23%); opacity: 0.81" title="-0.085">happened</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.68%); opacity: 0.81" title="-0.103">to</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 88.68%); opacity: 0.83" title="0.408">mention</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 96.29%); opacity: 0.81" title="0.083">that</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 97.47%); opacity: 0.80" title="-0.048">she</span><span style="opacity: 0.80">'</span><span style="background-color: hsl(0, 100.00%, 94.02%); opacity: 0.81" title="-0.164">d</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.38%); opacity: 0.81" title="-0.150">had</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 82.80%); opacity: 0.86" title="-0.741">kidney</span><span style="opacity: 0.80">
+</span><span style="background-color: hsl(0, 100.00%, 85.27%); opacity: 0.85" title="-0.593">stones</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.46%); opacity: 0.81" title="-0.147">and</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 92.61%); opacity: 0.82" title="-0.221">children</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(0, 100.00%, 93.78%); opacity: 0.81" title="-0.173">and</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 93.81%); opacity: 0.81" title="-0.172">the</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.51%); opacity: 0.81" title="-0.076">childbirth</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 97.10%); opacity: 0.80" title="-0.058">hurt</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 95.45%); opacity: 0.81" title="0.111">less</span><span style="opacity: 0.80">.</span>
+    </p>
+
+    
+        
+    
+        
+        
+    
+        <p style="margin-bottom: 0.5em; margin-top: 0em">
+            <b>
+    
+        y=comp.graphics
+    
+</b>
+
+    
+    (probability <b>0.000</b>, score <b>-8.932</b>)
+
+top features
+        </p>
+    
+    
+<table class="eli5-weights caption-top table table-sm table-striped small" data-quarto-postprocess="true">
+<thead>
+<tr class="header" style="border: none;">
+<th data-quarto-table-cell-role="th" style="text-align: right; padding: 0 1em 0 0.5em; border: none;" title="Feature contribution already accounts for the feature value (for linear models, contribution = weight * feature value), and the sum of feature contributions is equal to the score or, for some classifiers, to the probability. Feature values are shown if &quot;show_feature_values&quot; is True.">Contribution<sup>?</sup></th>
+<th data-quarto-table-cell-role="th" style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 98.21%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">-0.275</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">&lt;BIAS&gt;</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 80.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">-8.657</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">Highlighted in text (sum)</td>
+</tr>
+</tbody>
+</table>
+
+
+    
+
+
+
+    <p style="margin-bottom: 2.5em; margin-top:-0.5em;">
+        <span style="background-color: hsl(0, 100.00%, 98.17%); opacity: 0.80" title="-0.030">as</span><span style="opacity: 0.80"> i </span><span style="background-color: hsl(0, 100.00%, 87.85%); opacity: 0.84" title="-0.451">recall</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 95.19%); opacity: 0.81" title="0.120">from</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 93.44%); opacity: 0.82" title="0.187">my</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 93.15%); opacity: 0.82" title="0.199">bout</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.60%); opacity: 0.81" title="-0.141">with</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 78.92%); opacity: 0.88" title="-0.990">kidney</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 80.82%); opacity: 0.87" title="-0.866">stones</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(0, 100.00%, 99.46%); opacity: 0.80" title="-0.005">there</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 90.63%); opacity: 0.83" title="-0.311">isn</span><span style="opacity: 0.80">'</span><span style="background-color: hsl(120, 100.00%, 96.58%); opacity: 0.81" title="0.074">t</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 98.73%); opacity: 0.80" title="0.018">any</span><span style="opacity: 0.80">
+</span><span style="background-color: hsl(0, 100.00%, 82.68%); opacity: 0.86" title="-0.748">medication</span><span style="opacity: 0.80"> that </span><span style="background-color: hsl(0, 100.00%, 97.71%); opacity: 0.80" title="-0.041">can</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 97.73%); opacity: 0.80" title="-0.041">do</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 97.28%); opacity: 0.80" title="-0.053">anything</span><span style="opacity: 0.80"> about </span><span style="background-color: hsl(120, 100.00%, 97.41%); opacity: 0.80" title="0.050">them</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 97.41%); opacity: 0.80" title="0.050">except</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.28%); opacity: 0.81" title="-0.154">relieve</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 90.49%); opacity: 0.83" title="-0.317">the</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 63.75%); opacity: 0.97" title="-2.148">pain</span><span style="opacity: 0.80">.
+
+</span><span style="background-color: hsl(0, 100.00%, 94.32%); opacity: 0.81" title="-0.152">either</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 95.82%); opacity: 0.81" title="0.098">they</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 95.55%); opacity: 0.81" title="0.107">pass</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(0, 100.00%, 98.03%); opacity: 0.80" title="-0.033">or</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.25%); opacity: 0.81" title="-0.118">they</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 99.02%); opacity: 0.80" title="0.012">have</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 96.10%); opacity: 0.81" title="0.089">to</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 97.21%); opacity: 0.80" title="-0.055">be</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 98.12%); opacity: 0.80" title="-0.031">broken</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 96.20%); opacity: 0.81" title="0.086">up</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.05%); opacity: 0.81" title="-0.162">with</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 99.02%); opacity: 0.80" title="0.012">sound</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(0, 100.00%, 98.03%); opacity: 0.80" title="-0.033">or</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.25%); opacity: 0.81" title="-0.118">they</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 99.02%); opacity: 0.80" title="0.012">have</span><span style="opacity: 0.80">
+</span><span style="background-color: hsl(120, 100.00%, 96.10%); opacity: 0.81" title="0.089">to</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 98.22%); opacity: 0.80" title="-0.029">be</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 98.34%); opacity: 0.80" title="0.026">extracted</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 98.08%); opacity: 0.80" title="0.032">surgically</span><span style="opacity: 0.80">.
+
+</span><span style="background-color: hsl(120, 100.00%, 95.32%); opacity: 0.81" title="0.115">when</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 97.16%); opacity: 0.80" title="0.057">i</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 93.56%); opacity: 0.81" title="-0.182">was</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 97.15%); opacity: 0.80" title="0.057">in</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(120, 100.00%, 99.21%); opacity: 0.80" title="0.009">the</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 95.61%); opacity: 0.81" title="0.105">x</span><span style="opacity: 0.80">-</span><span style="background-color: hsl(120, 100.00%, 74.66%); opacity: 0.90" title="1.288">ray</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 99.48%); opacity: 0.80" title="-0.005">tech</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 90.04%); opacity: 0.83" title="-0.339">happened</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 96.01%); opacity: 0.81" title="0.092">to</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 97.03%); opacity: 0.80" title="0.060">mention</span><span style="opacity: 0.80"> that she'</span><span style="background-color: hsl(120, 100.00%, 98.73%); opacity: 0.80" title="0.018">d</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 99.51%); opacity: 0.80" title="-0.005">had</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 78.92%); opacity: 0.88" title="-0.990">kidney</span><span style="opacity: 0.80">
+</span><span style="background-color: hsl(0, 100.00%, 80.82%); opacity: 0.87" title="-0.866">stones</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.50%); opacity: 0.81" title="-0.145">and</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 84.55%); opacity: 0.85" title="-0.636">children</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(120, 100.00%, 99.20%); opacity: 0.80" title="0.009">and</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 91.19%); opacity: 0.82" title="0.285">the</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 93.70%); opacity: 0.81" title="0.176">childbirth</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 89.57%); opacity: 0.83" title="-0.363">hurt</span><span style="opacity: 0.80"> less.</span>
+    </p>
+
+    
+        
+    
+        
+        
+    
+        <p style="margin-bottom: 0.5em; margin-top: 0em">
+            <b>
+    
+        y=sci.med
+    
+</b>
+
+    
+    (probability <b>0.996</b>, score <b>7.104</b>)
+
+top features
+        </p>
+    
+    
+<table class="eli5-weights caption-top table table-sm table-striped small" data-quarto-postprocess="true">
+<thead>
+<tr class="header" style="border: none;">
+<th data-quarto-table-cell-role="th" style="text-align: right; padding: 0 1em 0 0.5em; border: none;" title="Feature contribution already accounts for the feature value (for linear models, contribution = weight * feature value), and the sum of feature contributions is equal to the score or, for some classifiers, to the probability. Feature values are shown if &quot;show_feature_values&quot; is True.">Contribution<sup>?</sup></th>
+<th data-quarto-table-cell-role="th" style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd" style="background-color: hsl(120, 100.00%, 82.49%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">+7.161</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">Highlighted in text (sum)</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 99.41%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">-0.057</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">&lt;BIAS&gt;</td>
+</tr>
+</tbody>
+</table>
+
+
+    
+
+
+
+    <p style="margin-bottom: 2.5em; margin-top:-0.5em;">
+        <span style="background-color: hsl(120, 100.00%, 96.72%); opacity: 0.81" title="0.069">as</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 98.18%); opacity: 0.80" title="0.030">i</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 86.30%); opacity: 0.84" title="0.535">recall</span><span style="opacity: 0.80"> from </span><span style="background-color: hsl(120, 100.00%, 98.56%); opacity: 0.80" title="0.022">my</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.35%); opacity: 0.81" title="-0.151">bout</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 97.58%); opacity: 0.80" title="-0.045">with</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 77.76%); opacity: 0.89" title="1.069">kidney</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 79.80%); opacity: 0.88" title="0.932">stones</span><span style="opacity: 0.80">, there </span><span style="background-color: hsl(0, 100.00%, 95.09%); opacity: 0.81" title="-0.124">isn</span><span style="opacity: 0.80">'</span><span style="background-color: hsl(0, 100.00%, 98.21%); opacity: 0.80" title="-0.029">t</span><span style="opacity: 0.80"> any
+</span><span style="background-color: hsl(120, 100.00%, 80.96%); opacity: 0.87" title="0.856">medication</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 98.20%); opacity: 0.80" title="-0.030">that</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.35%); opacity: 0.81" title="-0.114">can</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.33%); opacity: 0.81" title="-0.115">do</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.14%); opacity: 0.81" title="-0.088">anything</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 96.32%); opacity: 0.81" title="0.082">about</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 97.08%); opacity: 0.80" title="-0.059">them</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 98.67%); opacity: 0.80" title="0.019">except</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 93.73%); opacity: 0.81" title="0.175">relieve</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 91.31%); opacity: 0.82" title="0.279">the</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 60.00%); opacity: 1.00" title="2.473">pain</span><span style="opacity: 0.80">.
+
+</span><span style="background-color: hsl(120, 100.00%, 97.95%); opacity: 0.80" title="0.035">either</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.66%); opacity: 0.81" title="-0.104">they</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.38%); opacity: 0.81" title="-0.113">pass</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(0, 100.00%, 97.92%); opacity: 0.80" title="-0.036">or</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 97.09%); opacity: 0.80" title="-0.059">they</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 97.57%); opacity: 0.80" title="0.045">have</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 98.68%); opacity: 0.80" title="-0.019">to</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 96.19%); opacity: 0.81" title="0.086">be</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 92.86%); opacity: 0.82" title="-0.211">broken</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.61%); opacity: 0.81" title="-0.141">up</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 95.58%); opacity: 0.81" title="0.106">with</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 95.83%); opacity: 0.81" title="0.098">sound</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(0, 100.00%, 97.92%); opacity: 0.80" title="-0.036">or</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 97.09%); opacity: 0.80" title="-0.059">they</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 97.57%); opacity: 0.80" title="0.045">have</span><span style="opacity: 0.80">
+</span><span style="background-color: hsl(0, 100.00%, 98.68%); opacity: 0.80" title="-0.019">to</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 98.30%); opacity: 0.80" title="-0.027">be</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 92.89%); opacity: 0.82" title="-0.210">extracted</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 96.90%); opacity: 0.81" title="0.064">surgically</span><span style="opacity: 0.80">.
+
+when i </span><span style="background-color: hsl(120, 100.00%, 96.34%); opacity: 0.81" title="0.081">was</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 96.74%); opacity: 0.81" title="0.069">in</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(0, 100.00%, 99.36%); opacity: 0.80" title="-0.007">the</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 97.39%); opacity: 0.80" title="-0.050">x</span><span style="opacity: 0.80">-</span><span style="background-color: hsl(0, 100.00%, 83.80%); opacity: 0.86" title="-0.680">ray</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 91.72%); opacity: 0.82" title="0.260">tech</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.03%); opacity: 0.81" title="-0.164">happened</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.31%); opacity: 0.81" title="-0.116">to</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 91.78%); opacity: 0.82" title="-0.258">mention</span><span style="opacity: 0.80"> that she'd had </span><span style="background-color: hsl(120, 100.00%, 77.76%); opacity: 0.89" title="1.069">kidney</span><span style="opacity: 0.80">
+</span><span style="background-color: hsl(120, 100.00%, 79.80%); opacity: 0.88" title="0.932">stones</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 95.34%); opacity: 0.81" title="0.115">and</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.86%); opacity: 0.81" title="-0.065">children</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(120, 100.00%, 97.41%); opacity: 0.80" title="0.050">and</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 93.37%); opacity: 0.82" title="-0.190">the</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 93.46%); opacity: 0.82" title="-0.186">childbirth</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 91.11%); opacity: 0.82" title="0.288">hurt</span><span style="opacity: 0.80"> less.</span>
+    </p>
+
+    
+        
+    
+        
+        
+    
+        <p style="margin-bottom: 0.5em; margin-top: 0em">
+            <b>
+    
+        y=soc.religion.christian
+    
+</b>
+
+    
+    (probability <b>0.003</b>, score <b>-5.711</b>)
+
+top features
+        </p>
+    
+    
+<table class="eli5-weights caption-top table table-sm table-striped small" data-quarto-postprocess="true">
+<thead>
+<tr class="header" style="border: none;">
+<th data-quarto-table-cell-role="th" style="text-align: right; padding: 0 1em 0 0.5em; border: none;" title="Feature contribution already accounts for the feature value (for linear models, contribution = weight * feature value), and the sum of feature contributions is equal to the score or, for some classifiers, to the probability. Feature values are shown if &quot;show_feature_values&quot; is True.">Contribution<sup>?</sup></th>
+<th data-quarto-table-cell-role="th" style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 98.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">-0.322</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">&lt;BIAS&gt;</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 85.65%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">-5.389</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">Highlighted in text (sum)</td>
+</tr>
+</tbody>
+</table>
+
+
+    
+
+
+
+    <p style="margin-bottom: 2.5em; margin-top:-0.5em;">
+        <span style="background-color: hsl(0, 100.00%, 95.32%); opacity: 0.81" title="-0.115">as</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 99.05%); opacity: 0.80" title="-0.012">i</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 90.40%); opacity: 0.83" title="-0.322">recall</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 97.68%); opacity: 0.80" title="0.042">from</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.81%); opacity: 0.81" title="-0.098">my</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 92.59%); opacity: 0.82" title="0.222">bout</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 93.23%); opacity: 0.82" title="0.195">with</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 80.19%); opacity: 0.87" title="-0.906">kidney</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 82.97%); opacity: 0.86" title="-0.730">stones</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(120, 100.00%, 96.57%); opacity: 0.81" title="0.074">there</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 92.63%); opacity: 0.82" title="0.221">isn</span><span style="opacity: 0.80">'</span><span style="background-color: hsl(0, 100.00%, 98.23%); opacity: 0.80" title="-0.029">t</span><span style="opacity: 0.80"> any
+</span><span style="background-color: hsl(0, 100.00%, 85.47%); opacity: 0.85" title="-0.582">medication</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 98.32%); opacity: 0.80" title="0.027">that</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 92.13%); opacity: 0.82" title="0.242">can</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 91.78%); opacity: 0.82" title="0.258">do</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 93.92%); opacity: 0.81" title="0.168">anything</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.23%); opacity: 0.81" title="-0.085">about</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 94.91%); opacity: 0.81" title="0.130">them</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 99.50%); opacity: 0.80" title="-0.005">except</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 94.49%); opacity: 0.81" title="-0.146">relieve</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 91.30%); opacity: 0.82" title="-0.280">the</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 66.60%); opacity: 0.95" title="-1.912">pain</span><span style="opacity: 0.80">.
+
+</span><span style="background-color: hsl(0, 100.00%, 96.39%); opacity: 0.81" title="-0.080">either</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.43%); opacity: 0.81" title="-0.112">they</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 92.49%); opacity: 0.82" title="0.227">pass</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(120, 100.00%, 94.41%); opacity: 0.81" title="0.148">or</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 94.98%); opacity: 0.81" title="0.128">they</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 97.56%); opacity: 0.80" title="0.046">have</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 95.11%); opacity: 0.81" title="0.123">to</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.94%); opacity: 0.81" title="-0.063">be</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 89.63%); opacity: 0.83" title="0.359">broken</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 95.06%); opacity: 0.81" title="0.125">up</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.62%); opacity: 0.81" title="-0.073">with</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 99.36%); opacity: 0.80" title="0.007">sound</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(120, 100.00%, 97.31%); opacity: 0.80" title="0.052">or</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 94.98%); opacity: 0.81" title="0.128">they</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 97.56%); opacity: 0.80" title="0.046">have</span><span style="opacity: 0.80">
+</span><span style="background-color: hsl(120, 100.00%, 95.11%); opacity: 0.81" title="0.123">to</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 93.03%); opacity: 0.82" title="0.204">be</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 89.92%); opacity: 0.83" title="0.345">extracted</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.39%); opacity: 0.81" title="-0.080">surgically</span><span style="opacity: 0.80">.
+
+</span><span style="background-color: hsl(0, 100.00%, 96.24%); opacity: 0.81" title="-0.084">when</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 98.70%); opacity: 0.80" title="-0.018">i</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 96.99%); opacity: 0.80" title="0.061">was</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.12%); opacity: 0.81" title="-0.088">in</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(120, 100.00%, 96.64%); opacity: 0.81" title="0.072">the</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 93.42%); opacity: 0.82" title="0.188">x</span><span style="opacity: 0.80">-</span><span style="background-color: hsl(120, 100.00%, 95.07%); opacity: 0.81" title="0.124">ray</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 92.98%); opacity: 0.82" title="-0.206">tech</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 88.39%); opacity: 0.83" title="0.422">happened</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 93.10%); opacity: 0.82" title="0.201">to</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 89.13%); opacity: 0.83" title="0.385">mention</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 93.39%); opacity: 0.82" title="0.189">that</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 97.37%); opacity: 0.80" title="0.051">she</span><span style="opacity: 0.80">'</span><span style="background-color: hsl(120, 100.00%, 98.52%); opacity: 0.80" title="0.022">d</span><span style="opacity: 0.80"> had </span><span style="background-color: hsl(0, 100.00%, 80.19%); opacity: 0.87" title="-0.906">kidney</span><span style="opacity: 0.80">
+</span><span style="background-color: hsl(0, 100.00%, 82.97%); opacity: 0.86" title="-0.730">stones</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 96.70%); opacity: 0.81" title="-0.070">and</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 87.89%); opacity: 0.84" title="0.449">children</span><span style="opacity: 0.80">, </span><span style="background-color: hsl(120, 100.00%, 98.86%); opacity: 0.80" title="0.015">and</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 95.23%); opacity: 0.81" title="0.119">the</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(120, 100.00%, 95.77%); opacity: 0.81" title="0.100">childbirth</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.32%); opacity: 0.81" title="-0.115">hurt</span><span style="opacity: 0.80"> </span><span style="background-color: hsl(0, 100.00%, 95.20%); opacity: 0.81" title="-0.120">less</span><span style="opacity: 0.80">.</span>
+    </p>
+
+    
+
+
+    
+
+    
+
+    
+
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+
+
+</div>
+</div>
+</section>
+<section id="sanity-check" class="level2" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="sanity-check"><span class="header-section-number">3</span> Sanity check</h2>
+<p>We can do a sanity check by removing the highlighted words and check how the prediction changes.</p>
+<div id="c1418039-d333-4fe8-aa72-73c37e7f12b6" class="cell" data-tags="[]" data-execution_count="5">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> re</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>doc2 <span class="op">=</span> re.sub(<span class="vs">r"(recall|kidney|stones|medication|pain|tech)"</span>, <span class="st">""</span>, doc, flags<span class="op">=</span>re.I)</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>print_prediction(doc2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>0.067 alt.atheism
+0.150 comp.graphics
+0.354 sci.med
+0.428 soc.religion.christian</code></pre>
+</div>
+</div>
+<p>The predicted probabilities is indeed lower now.</p>
+<div id="d9be9977-cfa1-4e1b-8898-fa50e8c4d658" class="cell" data-tags="[]" data-execution_count="6">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(te.samples_[<span class="dv">0</span>])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>As    my   kidney ,  isn' any
+  can        .
+
+Either they ,     be    ,   
+to   .
+
+   ,  - tech  to mention  ' had kidney
+ and ,     .</code></pre>
+</div>
+</div>
+<div id="79d9e142-5f16-4b7e-b5f9-945160841dd4" class="cell" data-tags="[]" data-execution_count="7">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># By default, TextExplainer generates 5000 distorted texts.</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="bu">len</span>(te.samples_)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="7">
+<pre><code>5000</code></pre>
+</div>
+</div>
+<div id="225e2db7-fb0e-4407-a541-1ade389a18ef" class="cell" data-tags="[]" data-execution_count="8">
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>te.vec_, te.clf_</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="8">
+<pre><code>(CountVectorizer(ngram_range=(1, 2), token_pattern='(?u)\\b\\w+\\b'),
+ SGDClassifier(alpha=0.001, loss='log', penalty='elasticnet',
+               random_state=RandomState(MT19937) at 0x13144B040))</code></pre>
+</div>
+</div>
+<div id="7e24fde6-f4b1-4bff-8ce0-c3199e88cb56" class="cell" data-tags="[]" data-execution_count="9">
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>te.metrics_</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="9">
+<pre><code>{'mean_KL_divergence': 0.019433059538127587, 'score': 0.9850240438373423}</code></pre>
+</div>
+</div>
+</section>
+<section id="customizing-textexplainer-classifier" class="level2" data-number="4">
+<h2 data-number="4" class="anchored" data-anchor-id="customizing-textexplainer-classifier"><span class="header-section-number">4</span> Customizing TextExplainer: classifier</h2>
+<p>We can replace the default <code>SGDClassifier</code> (observed with <code>te.clf_</code>) with <code>DecisionTreeClassifier</code>.</p>
+<div id="a14b65d4-a707-405f-8a93-7d6088eb1a2c" class="cell" data-tags="[]" data-execution_count="11">
+<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.tree <span class="im">import</span> DecisionTreeClassifier</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>te5 <span class="op">=</span> TextExplainer(clf<span class="op">=</span>DecisionTreeClassifier(max_depth<span class="op">=</span><span class="dv">2</span>), random_state<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>te5.fit(doc, pipe.predict_proba)</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(te5.metrics_)</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>te5.show_weights()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>{'mean_KL_divergence': 0.03942534257087394, 'score': 0.9820333011866811}</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/usr/local/lib/python3.9/site-packages/sklearn/utils/deprecation.py:87: FutureWarning: Function get_feature_names is deprecated; get_feature_names is deprecated in 1.0 and will be removed in 1.2. Please use get_feature_names_out instead.
+  warnings.warn(msg, category=FutureWarning)</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="11">
+
+    <style>
+    table.eli5-weights tr:hover {
+        filter: brightness(85%);
+    }
+</style>
+
+
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+
+    
+
+    
+
+    
+
+    
+
+    
+        
+<table class="eli5-weights eli5-feature-importances caption-top table table-sm table-striped small" data-quarto-postprocess="true">
+<thead>
+<tr class="header" style="border: none;">
+<th data-quarto-table-cell-role="th" style="text-align: right; padding: 0 1em 0 0.5em; border: none;">Weight</th>
+<th data-quarto-table-cell-role="th" style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd" style="background-color: hsl(120, 100.00%, 80.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0.5441</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">kidney</td>
+</tr>
+<tr class="even" style="background-color: hsl(120, 100.00%, 82.33%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0.4559</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">pain</td>
+</tr>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">less</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">extracted</td>
+</tr>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">extracted surgically</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">from</td>
+</tr>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">from my</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">had</td>
+</tr>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">had kidney</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">happened</td>
+</tr>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">happened to</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">have</td>
+</tr>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">have to</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">medication</td>
+</tr>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">hurt less</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">isn t</td>
+</tr>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">hurt</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">kidney stones</td>
+</tr>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">except relieve</td>
+</tr>
+<tr class="even" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td style="text-align: right; padding: 0 1em 0 0.5em; border: none;">0</td>
+<td style="text-align: left; padding: 0 0.5em 0 0.5em; border: none;">x ray</td>
+</tr>
+<tr class="odd" style="background-color: hsl(0, 100.00%, 100.00%); border: none;">
+<td colspan="2" style="text-align: center; padding: 0 0.5em 0 0.5em; border: none; white-space: nowrap;"><em>… 93 more …</em></td>
+</tr>
+</tbody>
+</table>
+
+    
+
+    
+
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+        
+        <br>
+        <pre><svg width="968pt" height="269pt" viewbox="0.00 0.00 968.00 269.00" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 265)">
+<title>Tree</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-265 964,-265 964,4 -4,4"></polygon>
+<!-- 0 -->
+<g id="node1" class="node">
+<title>0</title>
+<polygon fill="none" stroke="black" points="589,-261 367,-261 367,-193 589,-193 589,-261"></polygon>
+<text text-anchor="middle" x="478" y="-245.8" font-family="Helvetica,sans-Serif" font-size="14.00">kidney &lt;= 0.5</text>
+<text text-anchor="middle" x="478" y="-230.8" font-family="Helvetica,sans-Serif" font-size="14.00">gini = 0.158</text>
+<text text-anchor="middle" x="478" y="-215.8" font-family="Helvetica,sans-Serif" font-size="14.00">samples = 100.0%</text>
+<text text-anchor="middle" x="478" y="-200.8" font-family="Helvetica,sans-Serif" font-size="14.00">value = [0.01, 0.033, 0.916, 0.041]</text>
+</g>
+<!-- 1 -->
+<g id="node2" class="node">
+<title>1</title>
+<polygon fill="none" stroke="black" points="469,-157 239,-157 239,-89 469,-89 469,-157"></polygon>
+<text text-anchor="middle" x="354" y="-141.8" font-family="Helvetica,sans-Serif" font-size="14.00">pain &lt;= 0.5</text>
+<text text-anchor="middle" x="354" y="-126.8" font-family="Helvetica,sans-Serif" font-size="14.00">gini = 0.389</text>
+<text text-anchor="middle" x="354" y="-111.8" font-family="Helvetica,sans-Serif" font-size="14.00">samples = 38.9%</text>
+<text text-anchor="middle" x="354" y="-96.8" font-family="Helvetica,sans-Serif" font-size="14.00">value = [0.028, 0.096, 0.768, 0.109]</text>
+</g>
+<!-- 0&#45;&gt;1 -->
+<g id="edge1" class="edge">
+<title>0-&gt;1</title>
+<path fill="none" stroke="black" d="M437.4,-192.6C426.59,-183.71 414.78,-174 403.55,-164.76"></path>
+<polygon fill="black" stroke="black" points="405.81,-162.08 395.86,-158.44 401.36,-167.49 405.81,-162.08"></polygon>
+<text text-anchor="middle" x="397.12" y="-178.66" font-family="Helvetica,sans-Serif" font-size="14.00">True</text>
+</g>
+<!-- 4 -->
+<g id="node5" class="node">
+<title>4</title>
+<polygon fill="none" stroke="black" points="717,-157 487,-157 487,-89 717,-89 717,-157"></polygon>
+<text text-anchor="middle" x="602" y="-141.8" font-family="Helvetica,sans-Serif" font-size="14.00">pain &lt;= 0.5</text>
+<text text-anchor="middle" x="602" y="-126.8" font-family="Helvetica,sans-Serif" font-size="14.00">gini = 0.045</text>
+<text text-anchor="middle" x="602" y="-111.8" font-family="Helvetica,sans-Serif" font-size="14.00">samples = 61.1%</text>
+<text text-anchor="middle" x="602" y="-96.8" font-family="Helvetica,sans-Serif" font-size="14.00">value = [0.003, 0.007, 0.977, 0.013]</text>
+</g>
+<!-- 0&#45;&gt;4 -->
+<g id="edge4" class="edge">
+<title>0-&gt;4</title>
+<path fill="none" stroke="black" d="M518.6,-192.6C529.41,-183.71 541.22,-174 552.45,-164.76"></path>
+<polygon fill="black" stroke="black" points="554.64,-167.49 560.14,-158.44 550.19,-162.08 554.64,-167.49"></polygon>
+<text text-anchor="middle" x="558.88" y="-178.66" font-family="Helvetica,sans-Serif" font-size="14.00">False</text>
+</g>
+<!-- 2 -->
+<g id="node3" class="node">
+<title>2</title>
+<polygon fill="none" stroke="black" points="222,-53 0,-53 0,0 222,0 222,-53"></polygon>
+<text text-anchor="middle" x="111" y="-37.8" font-family="Helvetica,sans-Serif" font-size="14.00">gini = 0.526</text>
+<text text-anchor="middle" x="111" y="-22.8" font-family="Helvetica,sans-Serif" font-size="14.00">samples = 28.4%</text>
+<text text-anchor="middle" x="111" y="-7.8" font-family="Helvetica,sans-Serif" font-size="14.00">value = [0.042, 0.146, 0.652, 0.16]</text>
+</g>
+<!-- 1&#45;&gt;2 -->
+<g id="edge2" class="edge">
+<title>1-&gt;2</title>
+<path fill="none" stroke="black" d="M267.99,-88.55C242.06,-78.47 213.78,-67.47 188.44,-57.62"></path>
+<polygon fill="black" stroke="black" points="189.78,-54.38 179.2,-54.02 187.25,-60.91 189.78,-54.38"></polygon>
+</g>
+<!-- 3 -->
+<g id="node4" class="node">
+<title>3</title>
+<polygon fill="none" stroke="black" points="470,-53 240,-53 240,0 470,0 470,-53"></polygon>
+<text text-anchor="middle" x="355" y="-37.8" font-family="Helvetica,sans-Serif" font-size="14.00">gini = 0.041</text>
+<text text-anchor="middle" x="355" y="-22.8" font-family="Helvetica,sans-Serif" font-size="14.00">samples = 10.6%</text>
+<text text-anchor="middle" x="355" y="-7.8" font-family="Helvetica,sans-Serif" font-size="14.00">value = [0.002, 0.005, 0.979, 0.014]</text>
+</g>
+<!-- 1&#45;&gt;3 -->
+<g id="edge3" class="edge">
+<title>1-&gt;3</title>
+<path fill="none" stroke="black" d="M354.35,-88.68C354.43,-80.99 354.52,-72.76 354.6,-64.9"></path>
+<polygon fill="black" stroke="black" points="358.1,-64.94 354.71,-54.91 351.1,-64.87 358.1,-64.94"></polygon>
+</g>
+<!-- 5 -->
+<g id="node6" class="node">
+<title>5</title>
+<polygon fill="none" stroke="black" points="712,-53 490,-53 490,0 712,0 712,-53"></polygon>
+<text text-anchor="middle" x="601" y="-37.8" font-family="Helvetica,sans-Serif" font-size="14.00">gini = 0.116</text>
+<text text-anchor="middle" x="601" y="-22.8" font-family="Helvetica,sans-Serif" font-size="14.00">samples = 22.8%</text>
+<text text-anchor="middle" x="601" y="-7.8" font-family="Helvetica,sans-Serif" font-size="14.00">value = [0.007, 0.02, 0.939, 0.033]</text>
+</g>
+<!-- 4&#45;&gt;5 -->
+<g id="edge5" class="edge">
+<title>4-&gt;5</title>
+<path fill="none" stroke="black" d="M601.65,-88.68C601.57,-80.99 601.48,-72.76 601.4,-64.9"></path>
+<polygon fill="black" stroke="black" points="604.9,-64.87 601.29,-54.91 597.9,-64.94 604.9,-64.87"></polygon>
+</g>
+<!-- 6 -->
+<g id="node7" class="node">
+<title>6</title>
+<polygon fill="none" stroke="black" points="960,-53 730,-53 730,0 960,0 960,-53"></polygon>
+<text text-anchor="middle" x="845" y="-37.8" font-family="Helvetica,sans-Serif" font-size="14.00">gini = 0.01</text>
+<text text-anchor="middle" x="845" y="-22.8" font-family="Helvetica,sans-Serif" font-size="14.00">samples = 38.2%</text>
+<text text-anchor="middle" x="845" y="-7.8" font-family="Helvetica,sans-Serif" font-size="14.00">value = [0.001, 0.001, 0.995, 0.003]</text>
+</g>
+<!-- 4&#45;&gt;6 -->
+<g id="edge6" class="edge">
+<title>4-&gt;6</title>
+<path fill="none" stroke="black" d="M688.01,-88.55C713.94,-78.47 742.22,-67.47 767.56,-57.62"></path>
+<polygon fill="black" stroke="black" points="768.75,-60.91 776.8,-54.02 766.22,-54.38 768.75,-60.91"></polygon>
+</g>
+</g>
+</svg>
+</pre>
+    
+
+
+
+</div>
+</div>
+<p>If <code>kidney &lt;= 0.5</code>, it means the word <code>kidney</code> is not in the document.</p>
+<p>So according to this tree, if the word <code>kidney</code> and <code>pain</code> is not in the document, the probability that this document belongs to <code>sci.med</code> drops to <code>0.65</code> (the bottom left node value, the third item in the value array). If at least one of these words remain, <code>sci.med</code> probability is <code>0.9+</code>.</p>
+<div id="25eafc96-d1ae-4ed8-94fe-ed7883647a1f" class="cell" data-tags="[]" data-execution_count="14">
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"both words removed:"</span>)</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>print_prediction(re.sub(<span class="vs">r"(kidney|pain)"</span>, <span class="st">""</span>, doc, flags<span class="op">=</span>re.I))</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>()</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'only "pain" removed:'</span>)</span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>print_prediction(re.sub(<span class="vs">r"(pain)"</span>, <span class="st">""</span>, doc, flags<span class="op">=</span>re.I))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>both words removed:
+0.014 alt.atheism
+0.023 comp.graphics
+0.895 sci.med
+0.068 soc.religion.christian
+
+only "pain" removed:
+0.003 alt.atheism
+0.004 comp.graphics
+0.981 sci.med
+0.013 soc.religion.christian</code></pre>
+</div>
+</div>
+</section>
+
+
+<div id="quarto-appendix" class="default"><section id="footnotes" class="footnotes footnotes-end-of-document" role="doc-endnotes"><h2 class="anchored quarto-appendix-heading">Footnotes</h2>
+
+<ol>
+<li id="fn1"><p>https://eli5.readthedocs.io/en/latest/tutorials/black-box-text-classifiers.html<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+</ol>
+</section></div></main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

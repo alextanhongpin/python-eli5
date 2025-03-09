@@ -1,0 +1,14 @@
+# uv run quarto create project
+#
+# https://quarto.org/docs/reference/formats/markdown/gfm.html
+project:
+  title: "python applied machine learning"
+  output-dir: docs
+  render:
+    - "**/*.ipynb"
+    - "!source" # Exclude source
+
+code-fold: false
+format: html # gfm: GitHub Flavored Markdown
+number-sections: true
+toc: true
