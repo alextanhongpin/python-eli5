@@ -19,6 +19,9 @@ install:
 	#@uv run jupyter labextension install jupyter-matplotlib
 
 
+preview:
+	uv run quarto preview
+
 render: create_docs_dir
 	uv run quarto render
 

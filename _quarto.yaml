@@ -7,8 +7,23 @@ project:
   output-dir: docs
   render:
     - "**/*.ipynb"
+    - "**/*.md"
     - "!source" # Exclude source
 code-fold: false
 format: html # gfm: GitHub Flavored Markdown
 number-sections: true
 toc: true
+
+website:
+  sidebar:
+    style: 'docked'
+    search: true
+    contents:
+      - text: "Home"
+        href: README.md
+      - section: "Notebooks"
+        contents:
+          - text: "Debugging scikit-learn text classification pipeline"
+            href: 01_debugging_scikit_learn_text_classification_pipeline.ipynb
+          - text: "Linear model"
+            href: linear_model.ipynb
