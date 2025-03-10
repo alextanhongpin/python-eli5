@@ -18,12 +18,4 @@ website:
   sidebar:
     style: 'docked'
     search: true
-    contents:
-      - text: "Home"
-        href: README.md
-      - section: "Notebooks"
-        contents:
-          - text: "Debugging scikit-learn text classification pipeline"
-            href: 01_debugging_scikit_learn_text_classification_pipeline.ipynb
-          - text: "Linear model"
-            href: linear_model.ipynb
+    contents: auto
